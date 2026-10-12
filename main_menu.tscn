@@ -1,104 +1,163 @@
-[gd_scene format=3 uid="uid://c3ah68aa01234"]
+[gd_scene load_steps=4 format=3 uid="uid://c3ah68aa01234"]
 
-[ext_resource type="Script" uid="uid://3qd4wll8vktl" path="res://main_menu.gd" id="1"]
-[ext_resource type="LabelSettings" uid="uid://cgi1vydqjrur2" path="res://new_label_settings.tres" id="2_7vrkn"]
-[ext_resource type="Theme" uid="uid://dxqjpleje544k" path="res://new_theme.tres" id="3_fu7sn"]
+[ext_resource type="Script" path="res://main_menu.gd" id="1"]
 
-[node name="MainMenu" type="Control" unique_id=1338417744]
+[sub_resource type="StyleBoxFlat" id="PanelStyle"]
+content_margin_left = 36.0
+content_margin_top = 28.0
+content_margin_right = 36.0
+content_margin_bottom = 28.0
+bg_color = Color(0.09, 0.2, 0.16, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.23, 0.39, 0.3, 1)
+corner_radius_top_left = 16
+corner_radius_top_right = 16
+corner_radius_bottom_left = 16
+corner_radius_bottom_right = 16
+
+[sub_resource type="Theme" id="MenuTheme"]
+default_font_size = 18
+Label/colors/font_color = Color(0.86, 0.94, 0.88, 1)
+
+[node name="MainMenu" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+theme = SubResource("MenuTheme")
 script = ExtResource("1")
 
-[node name="TitleLabel" type="Label" parent="." unique_id=1974090490]
+[node name="Background" type="ColorRect" parent="."]
 layout_mode = 1
-anchors_preset = -1
-anchor_left = 0.119
-anchor_top = 0.047000002
-anchor_right = 0.91300005
-anchor_bottom = 0.185
-offset_left = -0.5200043
-offset_top = 1.0199966
-offset_right = -0.040039063
-offset_bottom = 0.1000061
-size_flags_horizontal = 2
-size_flags_vertical = 2
-text = "Our Little Towne"
-label_settings = ExtResource("2_7vrkn")
-horizontal_alignment = 1
-vertical_alignment = 1
-
-[node name="HostButton" type="Button" parent="." unique_id=383054136]
-layout_mode = 1
-anchors_preset = -1
-anchor_left = 0.24400002
-anchor_top = 0.23900001
-anchor_right = 0.83000004
-anchor_bottom = 0.33900002
-offset_left = -7.5200195
-offset_top = 0.73999023
-offset_right = -0.4000244
-offset_bottom = 0.73999023
-size_flags_horizontal = 2
-size_flags_vertical = 2
-theme = ExtResource("3_fu7sn")
-text = "Host Game"
-
-[node name="JoinButton" type="Button" parent="." unique_id=483054136]
-layout_mode = 1
-anchors_preset = -1
-anchor_left = 0.24400002
-anchor_top = 0.38300002
-anchor_right = 0.83000004
-anchor_bottom = 0.47900003
-offset_left = -7.5200195
-offset_top = -0.22003174
-offset_right = -0.4000244
-offset_bottom = 9.139893
-size_flags_horizontal = 2
-size_flags_vertical = 2
-theme = ExtResource("3_fu7sn")
-text = "Join Game"
-
-[node name="SettingsButton" type="Button" parent="." unique_id=2105092401]
-layout_mode = 1
-anchors_preset = -1
-anchor_left = 0.24400002
-anchor_top = 0.52700003
-anchor_right = 0.83000004
-anchor_bottom = 0.62300003
-offset_left = -7.5200195
-offset_top = -0.22003174
-offset_right = -0.4000244
-offset_bottom = 9.139893
-size_flags_horizontal = 2
-size_flags_vertical = 2
-theme = ExtResource("3_fu7sn")
-text = "Settings"
-
-[node name="Settings" type="Panel" parent="." unique_id=1936712078]
-visible = false
-layout_mode = 0
+anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.05, 0.12, 0.1, 1)
 
-[node name="SettingsTitle" type="Label" parent="Settings" unique_id=1206293772]
-layout_mode = 0
-anchor_left = 0.5
-anchor_top = 0.1
-anchor_right = 0.5
-anchor_bottom = 0.2
-text = "Settings"
-horizontal_alignment = 1
-vertical_alignment = 1
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 
-[node name="BackButton" type="Button" parent="Settings" unique_id=1963383357]
-layout_mode = 0
-anchor_left = 0.5
-anchor_top = 0.8
-anchor_right = 0.5
-anchor_bottom = 0.9
-text = "Back"
+[node name="Panel" type="PanelContainer" parent="Center"]
+custom_minimum_size = Vector2(620, 0)
+layout_mode = 2
+theme_override_styles/panel = SubResource("PanelStyle")
+
+[node name="Rows" type="VBoxContainer" parent="Center/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="Title" type="Label" parent="Center/Panel/Rows"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 36
+text = "Our Little Towne"
+
+[node name="Subtitle" type="Label" parent="Center/Panel/Rows"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.77, 0.66, 1)
+text = "One shared field. Your own little player."
+
+[node name="Separator" type="HSeparator" parent="Center/Panel/Rows"]
+layout_mode = 2
+
+[node name="NameLabel" type="Label" parent="Center/Panel/Rows"]
+layout_mode = 2
+text = "Player name"
+
+[node name="PlayerName" type="LineEdit" parent="Center/Panel/Rows"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 42)
+layout_mode = 2
+text = "Player"
+max_length = 24
+
+[node name="EndpointLabels" type="HBoxContainer" parent="Center/Panel/Rows"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="AddressLabel" type="Label" parent="Center/Panel/Rows/EndpointLabels"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Server address"
+
+[node name="PortLabel" type="Label" parent="Center/Panel/Rows/EndpointLabels"]
+custom_minimum_size = Vector2(140, 0)
+layout_mode = 2
+text = "UDP port"
+
+[node name="Endpoint" type="HBoxContainer" parent="Center/Panel/Rows"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="Address" type="LineEdit" parent="Center/Panel/Rows/Endpoint"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 42)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "127.0.0.1"
+placeholder_text = "192.168.1.10"
+max_length = 253
+
+[node name="Port" type="SpinBox" parent="Center/Panel/Rows/Endpoint"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 42)
+layout_mode = 2
+min_value = 1.0
+max_value = 65535.0
+value = 7000.0
+
+[node name="Buttons" type="HBoxContainer" parent="Center/Panel/Rows"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="JoinButton" type="Button" parent="Center/Panel/Rows/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Join server"
+
+[node name="HostButton" type="Button" parent="Center/Panel/Rows/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Start server"
+
+[node name="CancelButton" type="Button" parent="Center/Panel/Rows"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+text = "Cancel connection"
+
+[node name="Status" type="Label" parent="Center/Panel/Rows"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+text = "Start a server or join one on your local network."
+autowrap_mode = 2
+
+[node name="Hint" type="Label" parent="Center/Panel/Rows"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.77, 0.66, 1)
+theme_override_font_sizes/font_size = 15
+text = "To play on the server computer, open a second instance and join\n127.0.0.1. Other players use this computer's network address."
+
+[node name="LocalAddresses" type="Label" parent="Center/Panel/Rows"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.77, 0.66, 1)
+theme_override_font_sizes/font_size = 15
+autowrap_mode = 2

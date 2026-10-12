@@ -1,220 +1,301 @@
 extends Node
+## The server simulates the field. Clients send input and render its snapshots.
+## RPCs live on this autoload so joining never depends on scene load timing.
 
-# Multiplayer networking manager using ENetMultiplayerPeer
-var is_server = false
-var my_player_id = -1
-var connected_players = []
-var peer = null
-var lobby_name = ""
-var max_players = 8
+signal session_started
+signal session_ended(reason: String)
+signal world_updated
+signal pulse_received(player_id: int, origin: Vector2, tint: Color)
 
-signal player_joined(player_id, player_data)
-signal player_left(player_id)
-signal player_ready_changed(player_id, is_ready)
-signal game_start_requested()
+const DEFAULT_PORT := 7000
+const MAX_PLAYERS := 8
+const PROTOCOL_VERSION := 1
+const FIELD := Rect2(64, 120, 1152, 520)
+const PLAYER_RADIUS := 16.0
+const MOVE_SPEED := 240.0
+const SNAPSHOT_INTERVAL := 1.0 / 20.0
+const INPUT_TIMEOUT := 0.5
+const CONNECTION_TIMEOUT := 8.0
+const SERVER_TIMEOUT := 3.0
+const PULSE_COOLDOWN := 0.75
+const PLAYER_COLORS := [
+	Color("ffd166"), Color("7bdff2"), Color("cdb4db"), Color("ff9b85"),
+	Color("b8f2b0"), Color("f7aef8"), Color("a0c4ff"), Color("fdffb6"),
+]
 
-func _ready():
-	print("Network manager initialized")
-	if Engine.is_editor_hint():
-		return
-	
-	multiplayer.peer_connected.connect(_on_peer_connected)
+var is_server := false
+var is_connecting := false
+var is_active := false
+var my_player_id := 0
+var server_port := DEFAULT_PORT
+var server_address := "127.0.0.1"
+var display_name := "Player"
+var status_message := "Start a server or join one on your local network."
+var players: Dictionary = {}
+
+var _peer: ENetMultiplayerPeer
+var _inputs: Dictionary = {}
+var _input_times: Dictionary = {}
+var _pulse_times: Dictionary = {}
+var _spawn_slots: Dictionary = {}
+var _snapshot_elapsed := 0.0
+var _snapshot_sequence := 0
+var _last_snapshot_sequence := -1
+var _session_generation := 0
+var _last_snapshot_time := 0
+
+
+func _ready() -> void:
+	multiplayer.connected_to_server.connect(_on_connected_to_server)
+	multiplayer.connection_failed.connect(_on_connection_failed)
+	multiplayer.server_disconnected.connect(_on_server_disconnected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
+	# Clients cannot relay RPCs to other clients.
+	(multiplayer as SceneMultiplayer).server_relay = false
 
-func start_server(port=7000):
-	print("Starting server on port " + str(port))
+
+func start_server(port: int = DEFAULT_PORT) -> Error:
+	cleanup()
+	if port < 1 or port > 65535:
+		status_message = "Port must be between 1 and 65535."
+		return ERR_INVALID_PARAMETER
+	var candidate := ENetMultiplayerPeer.new()
+	var error := candidate.create_server(port, MAX_PLAYERS, 3)
+	if error != OK:
+		candidate.close()
+		status_message = "Cannot listen on UDP port %d: %s" % [port, error_string(error)]
+		return error
+	_peer = candidate
+	multiplayer.multiplayer_peer = _peer
+	server_port = port
 	is_server = true
-	
-	peer = ENetMultiplayerPeer.new()
-	var err = peer.create_server(port, max_players)
-	if err != OK:
-		print("Failed to create server: " + str(err))
-		return false
-	
-	multiplayer.multiplayer_peer = peer
-	my_player_id = 1
-	
-	print("Server started successfully")
-	return true
+	is_active = true
+	status_message = "Server listening on UDP port %d." % port
+	print(status_message)
+	session_started.emit()
+	return OK
 
-func connect_to_server(ip_address, port=7000, player_data=null):
-	print("Connecting to server at: " + ip_address + ":" + str(port))
-	is_server = false
-	
-	peer = ENetMultiplayerPeer.new()
-	var err = peer.create_client(ip_address, port)
-	if err != OK:
-		print("Failed to create client: " + str(err))
-		return false
-	
-	multiplayer.multiplayer_peer = peer
-	
-	# Wait for connection to be established
-	var timeout = 3.0
-	while timeout > 0 and (peer.get_connection_status() != ENetMultiplayerPeer.CONNECTION_CONNECTED):
-		await get_tree().create_timer(0.1).timeout
-		timeout -= 0.1
-	
-	if peer.get_connection_status() != ENetMultiplayerPeer.CONNECTION_CONNECTED:
-		print("Connection timed out")
-		return false
-	
-	my_player_id = multiplayer.get_unique_id()
-	print("Connected with player ID: " + str(my_player_id))
-	
-	# Wait briefly for Godot's internal peer registration to complete
-	await get_tree().create_timer(1.0).timeout
-	
-	# Send join request to server with actual character data
-	if player_data == null:
-		player_data = {"name": "Player" + str(my_player_id), "ready": false}
-	rpc_id(1, "broadcast_player_join", my_player_id, player_data)
-	
-	return true
 
-func _on_peer_connected(id):
-	print("Client connected: " + str(id))
-	# Send current lobby state to the new joiner so they see existing players
-	if is_server and id != 1:
-		call_deferred("_sync_lobby_with_new_player", id)
+func connect_to_server(address: String, port: int = DEFAULT_PORT, player_name: String = "Player") -> Error:
+	cleanup()
+	address = address.strip_edges()
+	if address.is_empty() or port < 1 or port > 65535:
+		status_message = "Enter a server address and a port between 1 and 65535."
+		return ERR_INVALID_PARAMETER
+	var candidate := ENetMultiplayerPeer.new()
+	var error := candidate.create_client(address, port, 3)
+	if error != OK:
+		candidate.close()
+		status_message = "Cannot connect: %s" % error_string(error)
+		return error
+	_peer = candidate
+	multiplayer.multiplayer_peer = _peer
+	server_address = address
+	server_port = port
+	display_name = _clean_name(player_name)
+	is_connecting = true
+	status_message = "Connecting to %s:%d..." % [address, port]
+	_wait_for_connection(_session_generation)
+	return OK
 
-func _sync_lobby_with_new_player(peer_id):
-	rpc_id(peer_id, "sync_lobby_state", connected_players)
 
-func _on_peer_disconnected(id):
-	print("Client disconnected: " + str(id))
-	remove_player_from_lobby(id)
-	emit_signal("player_left", id)
+func _wait_for_connection(generation: int) -> void:
+	await get_tree().create_timer(CONNECTION_TIMEOUT).timeout
+	if generation == _session_generation and is_connecting:
+		_end_session("Connection timed out. Check the address, UDP port, firewall, and server capacity.")
 
-@rpc("any_peer", "reliable")
-func add_player_to_lobby(player_id, player_data):
-	print("DEBUG: NetworkManager.add_player_to_lobby called with player_id=" + str(player_id) + ", data=" + str(player_data))
-	if not has_player_in_lobby(player_id):
-		connected_players.append({"id": player_id, "data": player_data})
-		print("Player added to lobby: " + str(player_id))
-		emit_signal("player_joined", player_id, player_data)
-		# Broadcast the updated lobby state to all players
-		broadcast_lobby_state()
-	else:
-		print("Player " + str(player_id) + " already in lobby")
-	
-	# If this is the host/server, spawn the player in the game scene when they join
-	if is_server and multiplayer.get_unique_id() == 1:
-		print("Server spawning player " + str(player_id) + " in game")
-		rpc("spawn_player_in_game", player_id, player_data)
 
-@rpc("any_peer", "reliable")
-func sync_lobby_state(players):
-	connected_players = players
-	for p in connected_players:
-		emit_signal("player_joined", p.id, p.data)
-
-@rpc("any_peer", "reliable")
-func broadcast_player_join(player_id, player_data):
-	add_player_to_lobby(player_id, player_data)
-
-func remove_player_from_lobby(player_id):
-	print("DEBUG: NetworkManager.remove_player_from_lobby called with player_id=" + str(player_id))
-	for i in range(connected_players.size()):
-		if connected_players[i].id == player_id:
-			var removed_player = connected_players[i]
-			connected_players.remove_at(i)
-			print("Player removed from lobby: " + str(player_id))
-			emit_signal("player_left", player_id)
-			# Broadcast the updated lobby state to all players
-			broadcast_lobby_state()
-			return true
-	print("Player not found in lobby for removal: " + str(player_id))
-	return false
-
-@rpc("any_peer", "reliable")
-func broadcast_lobby_state():
-	print("DEBUG: Broadcasting lobby state with " + str(connected_players.size()) + " players")
-	for p in connected_players:
-		print("  Player ID: " + str(p.id) + ", Name: " + str(p.data.name) + ", Ready: " + str(p.data.ready))
-	
-	# Broadcast to all connected peers (except the sender)
-	for peer_id in multiplayer.get_peers():
-		if peer_id != multiplayer.get_unique_id():
-			rpc_id(peer_id, "sync_lobby_state", connected_players)
-
-func has_player_in_lobby(player_id):
-	print("DEBUG: Checking if player " + str(player_id) + " is in lobby")
-	for p in connected_players:
-		if p.id == player_id:
-			return true
-	print("DEBUG: Player " + str(player_id) + " not found in lobby")
-	return false
-
-func get_player_data(player_id):
-	print("DEBUG: NetworkManager.get_player_data called for player_id=" + str(player_id))
-	for p in connected_players:
-		if p.id == player_id:
-			print("DEBUG: Found player data for " + str(player_id) + ": " + str(p.data))
-			return p.data
-	print("DEBUG: Player data not found for " + str(player_id))
-	return null
-
-@rpc("any_peer", "reliable")
-func set_player_ready(player_id, is_ready):
-	for i in range(connected_players.size()):
-		if connected_players[i].id == player_id:
-			connected_players[i].data.ready = is_ready
-			emit_signal("player_ready_changed", player_id, is_ready)
-			# Also directly broadcast the update to all peers
-			broadcast_player_ready_change(player_id, is_ready)
-			return
-
-@rpc("any_peer", "reliable") 
-func broadcast_player_ready_change(player_id, is_ready):
-	# This function is called by the host to directly notify all peers of ready status changes
-	emit_signal("player_ready_changed", player_id, is_ready)
-
-func get_player_count():
-	return connected_players.size()
-
-func are_all_players_ready():
-	for p in connected_players:
-		if not p.data.ready:
-			return false
-	return true
-
-@rpc("any_peer", "reliable")
-func request_game_start():
-	print("Game start requested by player " + str(my_player_id))
-	emit_signal("game_start_requested")
-
-func cleanup():
-	if peer != null:
-		peer.close()
-		multiplayer.multiplayer_peer = null
-
-# New function to handle spawning players when they join the game
-@rpc("any_peer", "reliable")
-func spawn_player_in_game(player_id, player_data):
-	# This function is called by the server to tell all clients to spawn a new player
-	print("Received spawn_player_in_game RPC for player ID: " + str(player_id))
-	
-	# Only spawn on client side (not server)
-	if multiplayer.is_server():
+func _on_connected_to_server() -> void:
+	if not is_connecting:
 		return
-	
-	# In a proper implementation, we would use Godot's MultiplayerSpawner system
-	# For now, let's just print that spawning is handled by the multiplayer system
-	print("Player spawning will be handled automatically by Godot's multiplayer system")
-	
-	# Let's try to manually spawn if needed - this is for debugging purposes
-	var spawner = get_node_or_null("MultiplayerSpawner")
-	if spawner != null:
-		print("Found MultiplayerSpawner, attempting to spawn player...")
-		# This might not work as expected in all cases, but let's try it
-		var player_scene = preload("res://player.tscn")
-		if player_scene != null:
-			var player = player_scene.instantiate()
-			# Add the player to the scene - this needs to be done properly
-			add_child(player)
-			print("Player instantiated manually for debugging")
+	my_player_id = multiplayer.get_unique_id()
+	_join_game.rpc_id(1, PROTOCOL_VERSION, display_name)
+
+
+@rpc("any_peer", "call_remote", "reliable", 0)
+func _join_game(version: int, player_name: String) -> void:
+	if not is_server:
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	if sender <= 1 or not multiplayer.get_peers().has(sender) or players.has(sender):
+		return
+	if version != PROTOCOL_VERSION or players.size() >= MAX_PLAYERS:
+		_peer.disconnect_peer(sender)
+		return
+	var slot := 0
+	while _spawn_slots.values().has(slot):
+		slot += 1
+	_spawn_slots[sender] = slot
+	players[sender] = {
+		"name": _clean_name(player_name),
+		"position": FIELD.get_center() + Vector2((slot % 4 - 1.5) * 96.0, (floori(slot / 4.0) - 0.5) * 96.0),
+		"color": PLAYER_COLORS[slot],
+	}
+	_inputs[sender] = Vector2.ZERO
+	_input_times[sender] = Time.get_ticks_msec()
+	_pulse_times[sender] = -10000
+	print("Player joined: %s (%d)" % [players[sender].name, sender])
+	_publish_world(true)
+
+
+func send_input(direction: Vector2) -> void:
+	if is_active and not is_server:
+		_submit_input.rpc_id(1, direction)
+
+
+@rpc("any_peer", "call_remote", "unreliable_ordered", 1)
+func _submit_input(direction: Vector2) -> void:
+	if not is_server or not direction.is_finite():
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	if not players.has(sender):
+		return
+	# Input is tied to its sender; clients never set positions or player IDs.
+	_inputs[sender] = direction.limit_length(1.0)
+	_input_times[sender] = Time.get_ticks_msec()
+
+
+func request_pulse() -> void:
+	if is_active and not is_server:
+		_submit_pulse.rpc_id(1)
+
+
+@rpc("any_peer", "call_remote", "reliable", 0)
+func _submit_pulse() -> void:
+	if not is_server:
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	if not players.has(sender):
+		return
+	var now := Time.get_ticks_msec()
+	if now - int(_pulse_times[sender]) < PULSE_COOLDOWN * 1000.0:
+		return
+	_pulse_times[sender] = now
+	var origin: Vector2 = players[sender].position
+	var tint: Color = players[sender].color
+	pulse_received.emit(sender, origin, tint)
+	for player_id in players:
+		_receive_pulse.rpc_id(player_id, sender, origin, tint)
+
+
+@rpc("authority", "call_remote", "reliable", 0)
+func _receive_pulse(player_id: int, origin: Vector2, tint: Color) -> void:
+	if is_active and not is_server:
+		pulse_received.emit(player_id, origin, tint)
+
+
+func _physics_process(delta: float) -> void:
+	if not is_active:
+		return
+	var now := Time.get_ticks_msec()
+	if not is_server:
+		if now - _last_snapshot_time > SERVER_TIMEOUT * 1000.0:
+			_end_session("The server stopped responding. Check the network and reconnect.")
+		return
+	for player_id in players:
+		var direction: Vector2 = _inputs[player_id]
+		if now - int(_input_times[player_id]) > INPUT_TIMEOUT * 1000.0:
+			direction = Vector2.ZERO
+		var next_position: Vector2 = players[player_id].position + direction * MOVE_SPEED * delta
+		next_position.x = clampf(next_position.x, FIELD.position.x + PLAYER_RADIUS, FIELD.end.x - PLAYER_RADIUS)
+		next_position.y = clampf(next_position.y, FIELD.position.y + PLAYER_RADIUS, FIELD.end.y - PLAYER_RADIUS)
+		players[player_id].position = next_position
+	_snapshot_elapsed += delta
+	if _snapshot_elapsed >= SNAPSHOT_INTERVAL:
+		_snapshot_elapsed = fmod(_snapshot_elapsed, SNAPSHOT_INTERVAL)
+		_publish_world(false)
+
+
+func _publish_world(reliable: bool) -> void:
+	_snapshot_sequence += 1
+	for player_id in players:
+		if reliable:
+			_receive_roster.rpc_id(player_id, players, _snapshot_sequence)
 		else:
-			print("Could not load player scene for manual instantiation")
-	else:
-		print("MultiplayerSpawner not found in current scene")
+			_receive_snapshot.rpc_id(player_id, players, _snapshot_sequence)
+	world_updated.emit()
+
+
+@rpc("authority", "call_remote", "reliable", 0)
+func _receive_roster(snapshot: Dictionary, sequence: int) -> void:
+	_accept_snapshot(snapshot, sequence)
+
+
+@rpc("authority", "call_remote", "unreliable_ordered", 2)
+func _receive_snapshot(snapshot: Dictionary, sequence: int) -> void:
+	_accept_snapshot(snapshot, sequence)
+
+
+func _accept_snapshot(snapshot: Dictionary, sequence: int) -> void:
+	if is_server or sequence <= _last_snapshot_sequence or not snapshot.has(my_player_id):
+		return
+	# Roster and movement updates travel on separate channels. Ignore old packets
+	# so they cannot resurrect departed players or rewind newer positions.
+	_last_snapshot_sequence = sequence
+	_last_snapshot_time = Time.get_ticks_msec()
+	players = snapshot
+	if is_connecting:
+		is_connecting = false
+		is_active = true
+		status_message = "Connected to %s:%d." % [server_address, server_port]
+		session_started.emit()
+	world_updated.emit()
+
+
+func _on_peer_disconnected(player_id: int) -> void:
+	if not is_server or not players.has(player_id):
+		return
+	players.erase(player_id)
+	_inputs.erase(player_id)
+	_input_times.erase(player_id)
+	_pulse_times.erase(player_id)
+	_spawn_slots.erase(player_id)
+	print("Player left: %d" % player_id)
+	_publish_world(true)
+
+
+func _on_connection_failed() -> void:
+	if is_connecting:
+		_end_session("Could not connect. Check the server address, UDP port, and available player slots.")
+
+
+func _on_server_disconnected() -> void:
+	if is_active or is_connecting:
+		_end_session("The server disconnected. You can reconnect when it is available.")
+
+
+func _end_session(reason: String) -> void:
+	cleanup()
+	status_message = reason
+	session_ended.emit(reason)
+
+
+func cleanup() -> void:
+	_session_generation += 1
+	is_server = false
+	is_active = false
+	is_connecting = false
+	my_player_id = 0
+	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
+	if _peer != null:
+		_peer.close()
+		_peer = null
+	players.clear()
+	_inputs.clear()
+	_input_times.clear()
+	_pulse_times.clear()
+	_spawn_slots.clear()
+	_snapshot_elapsed = 0.0
+	_snapshot_sequence = 0
+	_last_snapshot_sequence = -1
+	_last_snapshot_time = 0
+
+
+func _clean_name(player_name: String) -> String:
+	var result := ""
+	for character in player_name.strip_edges():
+		if character.unicode_at(0) >= 32 and character.unicode_at(0) != 127:
+			result += character
+		if result.length() == 24:
+			break
+	return "Player" if result.is_empty() else result
