@@ -22,23 +22,46 @@ func _ready() -> void:
 	NetworkManager.world_updated.connect(_refresh_world)
 	NetworkManager.pulse_received.connect(_on_pulse)
 	NetworkManager.session_ended.connect(_on_session_ended)
-	# Connect to experience gained signal
-	NetworkManager.experience_gained.connect(_on_experience_gained)
+	NetworkManager.pulse_processed.connect(_on_pulse_processed)
+
 	leave_button.pressed.connect(_leave)
 	leave_button.focus_mode = Control.FOCUS_NONE
 	leave_button.text = "Stop server" if NetworkManager.is_server else "Disconnect"
 	_refresh_world()
 	queue_redraw()
 	
-	# Initialize experience bar
+	# Initialize experience bar - defer to make sure nodes are ready
 	if not NetworkManager.is_server:
-		var experience_container := $HUD/Margin/Rows/ExperienceContainer
-		var player_experience_list := experience_container.get_node("PlayerExperienceList")
-		var experience_bar := player_experience_list.get_node("ExperienceBar")
-		experience_bar.value = _my_experience
+		call_deferred("_initialize_experience_bar")
 	else:
 		# Hide the experience container for the host
-		$HUD/Margin/Rows/ExperienceContainer.visible = false
+		var experience_container := $HUD/Margin/Rows/ExperienceContainer
+		if experience_container:
+			experience_container.visible = false
+
+
+func _initialize_experience_bar() -> void:
+	# Make sure we're in a player session and nodes are accessible
+	if NetworkManager.is_server:
+		return
+		
+	var experience_container := $HUD/Margin/Rows/ExperienceContainer
+	if not experience_container:
+		print("DEBUG: Experience container not found")
+		return
+		
+	var player_experience_list := experience_container.get_node("PlayerExperienceList")
+	if not player_experience_list:
+		print("DEBUG: Player experience list not found")
+		return
+	
+	var experience_bar := player_experience_list.get_node("ExperienceBar")
+	if not experience_bar:
+		print("DEBUG: Experience bar not found")
+		return
+		
+	print("DEBUG: Setting experience bar value to ", _my_experience)
+	experience_bar.value = _my_experience
 
 
 func _physics_process(delta: float) -> void:
@@ -108,9 +131,16 @@ func _update_experience_display() -> void:
 		return
 		
 	var player_experience_container := $HUD/Margin/Rows/ExperienceContainer/PlayerExperienceList
+	if not player_experience_container:
+		print("DEBUG: Player experience container not found in update")
+		return
 	
 	# Update the progress bar value
 	var experience_bar := player_experience_container.get_node("ExperienceBar")
+	if not experience_bar:
+		print("DEBUG: Experience bar not found in update")
+		return
+		
 	experience_bar.value = _my_experience
 
 
@@ -118,10 +148,13 @@ func _on_pulse(_player_id: int, origin: Vector2, tint: Color) -> void:
 	_pulses.append({"origin": origin, "tint": tint, "age": 0.0})
 
 
-func _on_experience_gained() -> void:
-	# This is called when the local player gains experience
-	_my_experience += 1
-	_update_experience_display()
+func _on_pulse_processed(player_id: int) -> void:
+	# Only grant experience to the local player who initiated the pulse
+	if player_id == NetworkManager.my_player_id:
+		print("DEBUG: Pulse processed for player ", player_id, ", incrementing experience")
+		_my_experience += 1
+		print("DEBUG: Experience is now ", _my_experience)
+		_update_experience_display()
 
 
 func _draw() -> void:
