@@ -112,9 +112,9 @@ func _update_experience_display() -> void:
 		var label := Label.new()
 		label.text = "%s: %d XP" % [player_name, experience]
 		if is_local:
-			label.theme_override_colors.font_color = Color("ffffff")
+			label.set("custom_colors/font_color", Color("ffffff"))
 		else:
-			label.theme_override_colors.font_color = Color("cccccc")
+			label.set("custom_colors/font_color", Color("cccccc"))
 		label.horizontal_alignment = 0
 		player_experience_container.add_child(label)
 
