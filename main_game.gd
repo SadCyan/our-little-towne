@@ -9,6 +9,7 @@ var _pulses: Array[Dictionary] = []
 var _input_elapsed := 0.0
 var _previous_input := Vector2.ZERO
 var _leaving := false
+var _my_experience := 0
 
 @onready var status_label: Label = $HUD/Margin/Rows/Header/Status
 @onready var leave_button: Button = $HUD/Margin/Rows/Header/LeaveButton
@@ -21,11 +22,23 @@ func _ready() -> void:
 	NetworkManager.world_updated.connect(_refresh_world)
 	NetworkManager.pulse_received.connect(_on_pulse)
 	NetworkManager.session_ended.connect(_on_session_ended)
+	# Connect to experience gained signal
+	NetworkManager.experience_gained.connect(_on_experience_gained)
 	leave_button.pressed.connect(_leave)
 	leave_button.focus_mode = Control.FOCUS_NONE
 	leave_button.text = "Stop server" if NetworkManager.is_server else "Disconnect"
 	_refresh_world()
 	queue_redraw()
+	
+	# Initialize experience bar
+	if not NetworkManager.is_server:
+		var experience_container := $HUD/Margin/Rows/ExperienceContainer
+		var player_experience_list := experience_container.get_node("PlayerExperienceList")
+		var experience_bar := player_experience_list.get_node("ExperienceBar")
+		experience_bar.value = _my_experience
+	else:
+		# Hide the experience container for the host
+		$HUD/Margin/Rows/ExperienceContainer.visible = false
 
 
 func _physics_process(delta: float) -> void:
@@ -64,11 +77,8 @@ func _refresh_world() -> void:
 			_avatars.erase(player_id)
 	for player_id in NetworkManager.players:
 		var state: Dictionary = NetworkManager.players[player_id]
-		# Add experience to the player state for display
-		if NetworkManager.player_experience.has(player_id):
-			state.experience = NetworkManager.player_experience[player_id]
-		else:
-			state.experience = 0
+		# Add experience to the player state for display - but we'll use local experience
+		state.experience = _my_experience
 			
 		if not _avatars.has(player_id):
 			var avatar := PLAYER_SCENE.instantiate()
@@ -99,26 +109,19 @@ func _update_experience_display() -> void:
 		
 	var player_experience_container := $HUD/Margin/Rows/ExperienceContainer/PlayerExperienceList
 	
-	# Clear existing experience labels
-	for child in player_experience_container.get_children():
-		child.queue_free()
-	
-	# Create experience label for only the local player
-	var my_player_id := NetworkManager.my_player_id
-	if NetworkManager.players.has(my_player_id):
-		var state: Dictionary = NetworkManager.players[my_player_id]
-		var player_name: String = state.name
-		var experience: int = NetworkManager.player_experience.get(my_player_id, 0)
-		
-		var label := Label.new()
-		label.text = "%s: %d XP" % [player_name, experience]
-		label.set("custom_colors/font_color", Color("ffffff"))
-		label.horizontal_alignment = 0
-		player_experience_container.add_child(label)
+	# Update the progress bar value
+	var experience_bar := player_experience_container.get_node("ExperienceBar")
+	experience_bar.value = _my_experience
 
 
 func _on_pulse(_player_id: int, origin: Vector2, tint: Color) -> void:
 	_pulses.append({"origin": origin, "tint": tint, "age": 0.0})
+
+
+func _on_experience_gained() -> void:
+	# This is called when the local player gains experience
+	_my_experience += 1
+	_update_experience_display()
 
 
 func _draw() -> void:

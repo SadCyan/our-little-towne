@@ -6,6 +6,7 @@ signal session_started
 signal session_ended(reason: String)
 signal world_updated
 signal pulse_received(player_id: int, origin: Vector2, tint: Color)
+signal experience_gained
 
 const DEFAULT_PORT := 7000
 const MAX_PLAYERS := 8
@@ -32,7 +33,6 @@ var server_address := "127.0.0.1"
 var display_name := "Player"
 var status_message := "Start a server or join one on your local network."
 var players: Dictionary = {}
-var player_experience: Dictionary = {}
 
 var _peer: ENetMultiplayerPeer
 var _inputs: Dictionary = {}
@@ -176,13 +176,11 @@ func _submit_pulse() -> void:
 	var tint: Color = players[sender].color
 	pulse_received.emit(sender, origin, tint)
 	
-	# Increment experience for the player who pulsed
-	if not player_experience.has(sender):
-		player_experience[sender] = 0
-	player_experience[sender] += 1
-	
 	for player_id in players:
 		_receive_pulse.rpc_id(player_id, sender, origin, tint)
+	
+	# Emit signal for experience gain
+	experience_gained.emit()
 
 
 @rpc("authority", "call_remote", "reliable", 0)
@@ -257,7 +255,6 @@ func _on_peer_disconnected(player_id: int) -> void:
 	_input_times.erase(player_id)
 	_pulse_times.erase(player_id)
 	_spawn_slots.erase(player_id)
-	player_experience.erase(player_id)
 	print("Player left: %d" % player_id)
 	_publish_world(true)
 
