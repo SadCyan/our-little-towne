@@ -25,7 +25,7 @@ func _ready() -> void:
 func update_state(state: Dictionary) -> void:
 	target_position = state.position
 	name_label.text = "%s%s" % [state.name, " (you)" if is_local else ""]
-	level_label.text = "Lvl: %d" % player_level
+	level_label.text = "Lvl: %d" % (state.level if state.has("level") else player_level)
 
 
 func _process(delta: float) -> void:

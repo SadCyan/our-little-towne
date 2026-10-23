@@ -101,7 +101,7 @@ func _refresh_world() -> void:
 		if not _avatars.has(player_id):
 			var avatar := PLAYER_SCENE.instantiate()
 			avatar.name = "Player_%d" % player_id
-			avatar.configure(state, player_id == NetworkManager.my_player_id)
+			avatar.configure(state)
 			$Players.add_child(avatar)
 			_avatars[player_id] = avatar
 		_avatars[player_id].update_state(state)
