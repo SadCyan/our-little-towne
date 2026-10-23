@@ -47,20 +47,16 @@ func _initialize_experience_bar() -> void:
 		
 	var experience_container := $HUD/Margin/Rows/ExperienceContainer
 	if not experience_container:
-		print("DEBUG: Experience container not found")
 		return
 		
 	var player_experience_list := experience_container.get_node("PlayerExperienceList")
 	if not player_experience_list:
-		print("DEBUG: Player experience list not found")
 		return
 	
 	var experience_bar := player_experience_list.get_node("ExperienceBar")
 	if not experience_bar:
-		print("DEBUG: Experience bar not found")
 		return
 		
-	print("DEBUG: Setting experience bar value to ", _my_experience)
 	experience_bar.value = _my_experience
 
 
@@ -132,13 +128,11 @@ func _update_experience_display() -> void:
 		
 	var player_experience_container := $HUD/Margin/Rows/ExperienceContainer/PlayerExperienceList
 	if not player_experience_container:
-		print("DEBUG: Player experience container not found in update")
 		return
 	
 	# Update the progress bar value
 	var experience_bar := player_experience_container.get_node("ExperienceBar")
 	if not experience_bar:
-		print("DEBUG: Experience bar not found in update")
 		return
 		
 	experience_bar.value = _my_experience
@@ -150,11 +144,8 @@ func _on_pulse(_player_id: int, origin: Vector2, tint: Color) -> void:
 
 func _on_pulse_processed(player_id: int) -> void:
 	# Only grant experience to the local player who initiated the pulse
-	print("DEBUG: _on_pulse_processed called with player_id = ", player_id, ", my_player_id = ", NetworkManager.my_player_id)
 	if player_id == NetworkManager.my_player_id:
-		print("DEBUG: Pulse processed for player ", player_id, ", incrementing experience")
 		_my_experience += 1
-		print("DEBUG: Experience is now ", _my_experience)
 		_update_experience_display()
 
 
