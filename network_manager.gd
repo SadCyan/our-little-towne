@@ -6,7 +6,7 @@ signal session_started
 signal session_ended(reason: String)
 signal world_updated
 signal pulse_received(player_id: int, origin: Vector2, tint: Color)
-signal experience_gained
+signal pulse_processed(player_id: int)
 
 const DEFAULT_PORT := 7000
 const MAX_PLAYERS := 8
@@ -175,12 +175,11 @@ func _submit_pulse() -> void:
 	var origin: Vector2 = players[sender].position
 	var tint: Color = players[sender].color
 	pulse_received.emit(sender, origin, tint)
-	
 	for player_id in players:
 		_receive_pulse.rpc_id(player_id, sender, origin, tint)
 	
-	# Emit signal for experience gain
-	experience_gained.emit()
+	# Notify the specific player that their pulse was processed successfully
+	_pulse_processed.rpc_id(sender, sender)
 
 
 @rpc("authority", "call_remote", "reliable", 0)
