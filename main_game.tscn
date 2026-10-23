@@ -37,30 +37,34 @@ layout_mode = 2
 focus_mode = 0
 text = "Disconnect"
 
-[node name="Help" type="Label" parent="HUD/Margin/Rows" unique_id=888792912]
+[node name="PlayerInfo" type="HBoxContainer" parent="HUD/Margin/Rows" unique_id=2404620]
 layout_mode = 2
+alignment = 1
+
+[node name="Help" type="Label" parent="HUD/Margin/Rows/PlayerInfo" unique_id=888792912]
+layout_mode = 2
+size_flags_horizontal = 3
 theme_override_colors/font_color = Color(0.7, 0.84, 0.75, 1)
 text = "WASD: move | Space: pulse | Esc: disconnect"
 
-[node name="ExperienceContainer" type="VBoxContainer" parent="HUD/Margin/Rows" unique_id=786238982]
+[node name="ExperienceContainer" type="VBoxContainer" parent="HUD/Margin/Rows/PlayerInfo" unique_id=786238982]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 5
+alignment = 1
+
+[node name="PlayerExperienceList" type="HBoxContainer" parent="HUD/Margin/Rows/PlayerInfo/ExperienceContainer" unique_id=337769250]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 5
 
-[node name="PlayerExperienceList" type="HBoxContainer" parent="HUD/Margin/Rows/ExperienceContainer" unique_id=337769250]
+[node name="ExperienceLabel" type="Label" parent="HUD/Margin/Rows/PlayerInfo/ExperienceContainer/PlayerExperienceList" unique_id=123456789]
 layout_mode = 2
-theme_override_constants/separation = 5
-mouse_filter = 2
-
-[node name="ExperienceLabel" type="Label" parent="HUD/Margin/Rows/ExperienceContainer/PlayerExperienceList" unique_id=123456789]
-layout_mode = 2
-text = "Your Experience:"
 theme_override_font_sizes/font_size = 16
-mouse_filter = 2
+text = "Your Experience:"
 
-[node name="ExperienceBar" type="ProgressBar" parent="HUD/Margin/Rows/ExperienceContainer/PlayerExperienceList" unique_id=987654321]
-layout_mode = 2
+[node name="ExperienceBar" type="ProgressBar" parent="HUD/Margin/Rows/PlayerInfo/ExperienceContainer/PlayerExperienceList" unique_id=987654321]
 custom_minimum_size = Vector2(150, 20)
-max_value = 20.0
-value = 0.0
+layout_mode = 2
 mouse_filter = 2
+max_value = 20.0
