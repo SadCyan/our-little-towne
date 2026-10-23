@@ -1,115 +1,55 @@
-# Multiplayer Implementation Guide
+# Local multiplayer implementation
 
-This document outlines the multiplayer system implementation for Our Little Towne, providing guidelines for consistent development and future reference.
+## Roles and authority
 
-## Overview
+`NetworkManager` is an autoload on every instance, so its RPC path remains
+`/root/NetworkManager` while the menu and field scenes change. ENet uses UDP 7000
+by default, with a configurable port and eight remote player slots.
 
-The game implements a client-server multiplayer system using Godot's ENetMultiplayerPeer with a lobby-based architecture. The system supports up to 8 players connecting to a single server.
+The server is an observer, not a player. Its 60 Hz physics loop owns all positions,
+uses a fixed movement speed of 240 pixels/second, and clamps player centers inside
+the field with a 16 pixel margin. Clients send direction vectors, never positions
+or player IDs. RPC sender IDs identify the player. Non-finite vectors are ignored,
+vector length is capped at one, and input older than 0.5 seconds stops movement.
+Client-to-client packet relaying is disabled.
 
-## Core Components
+The client samples WASD at physics ticks and sends input at 30 Hz, or immediately
+when direction changes. It sends zero input when its window loses focus. Visible
+avatars interpolate toward the latest server positions; there is no local
+prediction, so movement response includes a network round trip.
 
-### NetworkManager.gd
-- Central network management node
-- Handles server creation and client connections
-- Manages player lobby state and communication
-- Implements RPC functions for lobby operations:
-  - Player joining/leaving
-  - Ready status changes
-  - Game start requests
-- Uses `@rpc("any_peer", "reliable")` for important operations
+## Joining and state
 
-### ConnectionAttempt.gd
-- Handles client connection process
-- Manages connection timeouts and error states
-- Provides UI feedback during connection
-- Supports both local and remote server connections
+After ENet reports a successful connection, the client sends its protocol version
+and display name to the server. The server assigns a free spawn slot and color,
+sanitizes the name to 24 characters, and sends the current world. Late joiners get
+the existing players at their current positions. No player is spawned for the
+server itself, and no lobby or character-selection step is needed.
 
-## Architecture
+Membership updates are reliable on channel 0. Movement snapshots contain the
+complete player dictionary at 20 Hz using unreliable ordered delivery on channel
+2. Each snapshot carries a monotonically increasing sequence number. The client
+ignores old sequences across both channels so delayed updates cannot rewind
+positions or resurrect departed players. The first accepted world snapshot
+finishes joining; snapshots are stored in the autoload even while a scene loads.
 
-### Client-Server Model
-- Server (host) has player ID 1
-- Clients receive random positive integer IDs
-- All communication goes through the host for lobby management
+## Pulses
 
-### Connection Flow
-1. Client connects to server using ENetMultiplayerPeer
-2. Connection validated with timeout checks
-3. Player data sent to lobby system via RPC
-4. Lobby state synchronized to all connected players
+Space sends a reliable request on channel 0. The server permits one pulse per
+player every 0.75 seconds and broadcasts the player's server position and color.
+The server observer and clients draw the same expanding ring for 0.65 seconds.
+Pulses are visual effects, not damage or persistent world objects.
 
-## Multiplayer Synchronization Implementation
+## Failure and cleanup
 
-### Scene Replication Configuration
-- `player_replication_config.tres` defines which properties are synchronized
-- Currently configured to synchronize the "position" property
-- Uses `REPLICATION_MODE_ON_CHANGE` for efficient bandwidth usage
+Disconnecting removes the player and all input, cooldown, and spawn-slot state on
+the server, then reliably publishes the remaining roster. Clients clear their
+world on disconnect and can reconnect with a new peer ID. Failed joins time out
+after eight seconds. A client with no server snapshots for three seconds ends its
+session even if the server process crashed without sending a disconnect packet.
+Connection attempts carry a local generation counter so an earlier timeout
+cannot cancel a later successful attempt.
 
-### Player Synchronization Setup
-- The player scene (`player.tscn`) now includes a `MultiplayerSynchronizer` component
-- The synchronizer is properly configured with:
-  - `root_path` set to "." (the player node itself)
-  - `replication_config` pointing to `player_replication_config.tres`
-- Position updates are sent via RPC calls from client players
-
-### Movement Synchronization
-- Players use local physics movement for smooth gameplay
-- Client players send their position updates to the server using RPC
-- Server validates positions and broadcasts updates to all connected clients
-- The `update_position` RPC function handles position synchronization on non-server peers
-
-## Best Practices Implemented
-
-### RPC Usage
-- Use `@rpc("any_peer", "reliable")` for important lobby operations
-- All RPC functions must be defined on both server and client scripts
-- Ensure matching signatures between server and client implementations
-
-### Error Handling
-- Connection timeouts with retry logic
-- Proper cleanup of multiplayer peers
-- Error reporting through print statements
-
-### Data Management
-- Player data stored as dictionaries with name and ready status
-- Lobby state synchronized across all connected peers
-- Validation of player IDs before processing operations
-
-## Security Considerations
-
-⚠️ **Important**: The current implementation lacks:
-- Authentication mechanisms
-- Data validation for received information
-- Encryption for sensitive communications
-- Rate limiting for RPC calls
-
-These should be implemented before production release.
-
-## Scalability Notes
-
-### Current Limitations
-- Maximum players fixed at 8
-- No dynamic scaling support
-- Single lobby architecture
-
-### Future Improvements
-- Implement dynamic player count management
-- Add lobby creation/deletion functionality
-- Support multiple concurrent game sessions
-
-## Development Guidelines
-
-### Adding New RPC Functions
-1. Always use `@rpc("any_peer", "reliable")` for lobby operations
-2. Define the function on both server and client scripts
-3. Ensure matching signatures between implementations
-4. Include proper error handling in implementations
-
-### Connection Management
-- Always clean up multiplayer peers properly
-- Implement timeout checks during connection process
-- Handle disconnection events gracefully
-
-### Testing Considerations
-- Test with multiple clients connecting simultaneously
-- Verify lobby state synchronization across all players
-- Check that player removal works correctly when clients disconnect
+This is an open local-network prototype. User accounts, passwords, save-game
+persistence, server discovery, and Internet hosting are future additions. Desktop
+clients and servers should use the same project build and Godot version.

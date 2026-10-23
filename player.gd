@@ -1,57 +1,37 @@
-extends CharacterBody2D
+extends Node2D
+## A visual avatar. The server owns movement; this node only smooths snapshots.
 
-@export var speed = 400
-var is_server = false
+var target_position := Vector2.ZERO
+var tint := Color.WHITE
+var is_local := false
 
-func _ready():
-	# Set up input actions for WASD movement
-	InputMap.add_action("move_left")
-	InputMap.add_action("move_right")
-	InputMap.add_action("move_up")
-	InputMap.add_action("move_down")
-	
-	# Map keys to actions
-	InputMap.action_add_event("move_left", InputEventKey.new())
-	InputMap.action_add_event("move_right", InputEventKey.new())
-	InputMap.action_add_event("move_up", InputEventKey.new())
-	InputMap.action_add_event("move_down", InputEventKey.new())
-	
-	# Configure key mappings for WASD
-	var left_event = InputEventKey.new()
-	left_event.keycode = KEY_A
-	InputMap.action_add_event("move_left", left_event)
-	
-	var right_event = InputEventKey.new()
-	right_event.keycode = KEY_D
-	InputMap.action_add_event("move_right", right_event)
-	
-	var up_event = InputEventKey.new()
-	up_event.keycode = KEY_W
-	InputMap.action_add_event("move_up", up_event)
-	
-	var down_event = InputEventKey.new()
-	down_event.keycode = KEY_S
-	InputMap.action_add_event("move_down", down_event)
-	
-	# Check if this is the server instance
-	is_server = multiplayer.is_server()
+@onready var name_label: Label = $NameLabel
 
-func _physics_process(delta):
-	if not is_server:
-		get_input()
-		move_and_slide()
-	else:
-		# Server handles movement and broadcasts updates
-		get_input()
-		move_and_slide()
-		# Send position update to all other players
-		rpc("update_position", position)
 
-func get_input():
-	var input_direction = Input.get_vector("move_left", "move_right", "move_up", "move_down")
-	velocity = input_direction * speed
+func configure(state: Dictionary, local: bool) -> void:
+	tint = state.color
+	is_local = local
+	target_position = state.position
+	position = target_position
 
-@rpc("any_peer", "reliable")
-func update_position(new_position):
-	if not is_server:
-		position = new_position
+
+func _ready() -> void:
+	queue_redraw()
+
+
+func update_state(state: Dictionary) -> void:
+	target_position = state.position
+	name_label.text = "%s%s" % [state.name, " (you)" if is_local else ""]
+
+
+func _process(delta: float) -> void:
+	position = position.lerp(target_position, 1.0 - exp(-25.0 * delta))
+
+
+func _draw() -> void:
+	draw_circle(Vector2(0, 5), 19, Color(0, 0, 0, 0.2))
+	draw_circle(Vector2.ZERO, NetworkManager.PLAYER_RADIUS, tint)
+	draw_circle(Vector2(-5, -3), 2, Color("233c35"))
+	draw_circle(Vector2(5, -3), 2, Color("233c35"))
+	if is_local:
+		draw_arc(Vector2.ZERO, 22, 0, TAU, 48, Color.WHITE, 2, true)
