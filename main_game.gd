@@ -10,6 +10,7 @@ var _input_elapsed := 0.0
 var _previous_input := Vector2.ZERO
 var _leaving := false
 var _my_experience := 0
+var _my_level := 1
 
 @onready var status_label: Label = $HUD/Margin/Rows/Header/Status
 @onready var leave_button: Button = $HUD/Margin/Rows/Header/LeaveButton
@@ -35,7 +36,7 @@ func _ready() -> void:
 		_initialize_experience_bar()
 	else:
 		# Hide the experience container for the host
-		var experience_container := $HUD/Margin/Rows/ExperienceContainer
+		var experience_container := $HUD/Margin/Rows/PlayerInfo/ExperienceContainer
 		if experience_container:
 			experience_container.visible = false
 
@@ -45,15 +46,11 @@ func _initialize_experience_bar() -> void:
 	if NetworkManager.is_server:
 		return
 		
-	var experience_container := $HUD/Margin/Rows/ExperienceContainer
+	var experience_container = $HUD/Margin/Rows/PlayerInfo/ExperienceContainer/PlayerExperienceList
 	if not experience_container:
 		return
 		
-	var player_experience_list := experience_container.get_node("PlayerExperienceList")
-	if not player_experience_list:
-		return
-	
-	var experience_bar := player_experience_list.get_node("ExperienceBar")
+	var experience_bar = experience_container.get_node("ExperienceBar")
 	if not experience_bar:
 		return
 		
@@ -98,6 +95,8 @@ func _refresh_world() -> void:
 		var state: Dictionary = NetworkManager.players[player_id]
 		# Add experience to the player state for display - but we'll use local experience
 		state.experience = _my_experience
+		# Set level based on experience
+		state.level = _my_level
 			
 		if not _avatars.has(player_id):
 			var avatar := PLAYER_SCENE.instantiate()
@@ -106,15 +105,24 @@ func _refresh_world() -> void:
 			$Players.add_child(avatar)
 			_avatars[player_id] = avatar
 		_avatars[player_id].update_state(state)
+		# Update the level label for all players
+		if _avatars.has(player_id):
+			var player_node = _avatars[player_id]
+			if player_node and player_node.has_method("update_state"):
+				player_node.update_state(state)
 	var count := NetworkManager.players.size()
 	if NetworkManager.is_server:
 		status_label.text = "SERVER | UDP %d | %d/%d players" % [NetworkManager.server_port, count, NetworkManager.MAX_PLAYERS]
 	else:
 		status_label.text = "%s | %s:%d | %d players" % [NetworkManager.display_name, NetworkManager.server_address, NetworkManager.server_port, count]
-	$HUD/Margin/Rows/Help.text = (
-		"Server running. Open another instance and join to play. Esc: stop server."
-		if NetworkManager.is_server else "WASD: move   |   Space: pulse   |   Esc: disconnect"
-	)
+	
+	# Update help text - fixed node path
+	var help_label = $HUD/Margin/Rows/PlayerInfo/Help
+	if help_label:
+		help_label.text = (
+			"Server running. Open another instance and join to play. Esc: stop server."
+			if NetworkManager.is_server else "WASD: move   |   Space: pulse   |   Esc: disconnect"
+		)
 	
 	# Update experience display
 	_update_experience_display()
@@ -126,12 +134,13 @@ func _update_experience_display() -> void:
 	if NetworkManager.is_server:
 		return
 		
-	var player_experience_container := $HUD/Margin/Rows/ExperienceContainer/PlayerExperienceList
-	if not player_experience_container:
+	# Make sure all nodes exist before trying to access them
+	var experience_container = $HUD/Margin/Rows/PlayerInfo/ExperienceContainer/PlayerExperienceList
+	if not experience_container:
 		return
 	
 	# Update the progress bar value
-	var experience_bar := player_experience_container.get_node("ExperienceBar")
+	var experience_bar = experience_container.get_node("ExperienceBar")
 	if not experience_bar:
 		return
 		
@@ -147,6 +156,32 @@ func _on_pulse_processed(player_id: int) -> void:
 	if player_id == NetworkManager.my_player_id:
 		_my_experience += 1
 		_update_experience_display()
+		
+		# Only do level checking if we have access to the experience bar
+		var experience_container = $HUD/Margin/Rows/PlayerInfo/ExperienceContainer/PlayerExperienceList
+		if experience_container:
+			var experience_bar = experience_container.get_node("ExperienceBar")
+			if experience_bar:
+				# Keep checking if we've reached max value and level up until we don't anymore
+				while _my_experience >= experience_bar.max_value:
+					# Increment level
+					_my_level += 1
+					
+					# Update experience bar start and end points according to the formula
+					var previous_end = experience_bar.max_value
+					var new_end = ceil(previous_end * 1.7)
+					
+					# Set the new max value (end experience points) 
+					experience_bar.max_value = new_end
+					
+					# Reset experience to start from previous end point (but only after incrementing level)
+					_my_experience = previous_end
+		
+		# Update the player's level in all player states
+		for pid in NetworkManager.players:
+			if NetworkManager.players.has(pid):
+				var state = NetworkManager.players[pid]
+				state.level = _my_level
 
 
 func _draw() -> void:
