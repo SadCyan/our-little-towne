@@ -167,9 +167,9 @@ func _on_pulse_processed(player_id: int) -> void:
 					# Increment level
 					_my_level += 1
 					
-					# Update experience bar start and end points according to the formula
+					# Update experience bar start and end points according to the new formula (×1.25)
 					var previous_end = experience_bar.max_value
-					var new_end = ceil(previous_end * 1.7)
+					var new_end = ceil(previous_end * 1.25)
 					
 					# Set the new max value (end experience points) 
 					experience_bar.max_value = new_end

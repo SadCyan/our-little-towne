@@ -67,4 +67,4 @@ text = "Your Experience:"
 custom_minimum_size = Vector2(150, 20)
 layout_mode = 2
 mouse_filter = 2
-max_value = 20.0
+max_value = 5.0
