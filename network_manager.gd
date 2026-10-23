@@ -183,6 +183,12 @@ func _submit_pulse() -> void:
 
 
 @rpc("authority", "call_remote", "reliable", 0)
+func _pulse_processed(player_id: int) -> void:
+	# This function is called to notify a client that their pulse was processed
+	pulse_processed.emit(player_id)
+
+
+@rpc("authority", "call_remote", "reliable", 0)
 func _receive_pulse(player_id: int, origin: Vector2, tint: Color) -> void:
 	if is_active and not is_server:
 		pulse_received.emit(player_id, origin, tint)
