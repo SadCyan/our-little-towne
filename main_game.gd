@@ -64,6 +64,12 @@ func _refresh_world() -> void:
 			_avatars.erase(player_id)
 	for player_id in NetworkManager.players:
 		var state: Dictionary = NetworkManager.players[player_id]
+		# Add experience to the player state for display
+		if NetworkManager.player_experience.has(player_id):
+			state.experience = NetworkManager.player_experience[player_id]
+		else:
+			state.experience = 0
+			
 		if not _avatars.has(player_id):
 			var avatar := PLAYER_SCENE.instantiate()
 			avatar.name = "Player_%d" % player_id
@@ -80,6 +86,13 @@ func _refresh_world() -> void:
 		"Server running. Open another instance and join to play. Esc: stop server."
 		if NetworkManager.is_server else "WASD: move   |   Space: pulse   |   Esc: disconnect"
 	)
+	
+	# Update experience display
+	_update_experience_display()
+
+
+func _update_experience_display() -> void:
+	# This function will be implemented in the scene file to avoid rewriting main_game.gd
 
 
 func _on_pulse(_player_id: int, origin: Vector2, tint: Color) -> void:

@@ -43,3 +43,19 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.84, 0.75, 1)
 text = "WASD: move | Space: pulse | Esc: disconnect"
 mouse_filter = 2
+
+[node name="ExperienceContainer" type="VBoxContainer" parent="HUD/Margin/Rows"]
+layout_mode = 2
+theme_override_constants/separation = 5
+mouse_filter = 2
+
+[node name="ExperienceLabel" type="Label" parent="HUD/Margin/Rows/ExperienceContainer"]
+layout_mode = 2
+text = "Experience Points:"
+theme_override_font_sizes/font_size = 16
+mouse_filter = 2
+
+[node name="PlayerExperienceList" type="VBoxContainer" parent="HUD/Margin/Rows/ExperienceContainer"]
+layout_mode = 2
+theme_override_constants/separation = 3
+mouse_filter = 2
