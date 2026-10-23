@@ -93,7 +93,8 @@ func _refresh_world() -> void:
 
 func _update_experience_display() -> void:
 	# This function handles updating the HUD experience display
-	if $HUD/Margin/Rows/ExperienceContainer == null:
+	# Only show experience bars for player sessions, not the host
+	if NetworkManager.is_server:
 		return
 		
 	var player_experience_container := $HUD/Margin/Rows/ExperienceContainer/PlayerExperienceList
@@ -102,19 +103,16 @@ func _update_experience_display() -> void:
 	for child in player_experience_container.get_children():
 		child.queue_free()
 	
-	# Create new experience labels for each player
-	for player_id in NetworkManager.players:
-		var state: Dictionary = NetworkManager.players[player_id]
+	# Create experience label for only the local player
+	var my_player_id := NetworkManager.my_player_id
+	if NetworkManager.players.has(my_player_id):
+		var state: Dictionary = NetworkManager.players[my_player_id]
 		var player_name: String = state.name
-		var experience: int = NetworkManager.player_experience.get(player_id, 0)
-		var is_local: bool = player_id == NetworkManager.my_player_id
+		var experience: int = NetworkManager.player_experience.get(my_player_id, 0)
 		
 		var label := Label.new()
 		label.text = "%s: %d XP" % [player_name, experience]
-		if is_local:
-			label.set("custom_colors/font_color", Color("ffffff"))
-		else:
-			label.set("custom_colors/font_color", Color("cccccc"))
+		label.set("custom_colors/font_color", Color("ffffff"))
 		label.horizontal_alignment = 0
 		player_experience_container.add_child(label)
 
