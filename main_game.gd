@@ -30,9 +30,9 @@ func _ready() -> void:
 	_refresh_world()
 	queue_redraw()
 	
-	# Initialize experience bar - defer to make sure nodes are ready
+	# Initialize experience bar - try to initialize directly
 	if not NetworkManager.is_server:
-		call_deferred("_initialize_experience_bar")
+		_initialize_experience_bar()
 	else:
 		# Hide the experience container for the host
 		var experience_container := $HUD/Margin/Rows/ExperienceContainer
