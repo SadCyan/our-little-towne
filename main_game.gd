@@ -104,9 +104,10 @@ func _update_experience_display() -> void:
 	
 	# Create new experience labels for each player
 	for player_id in NetworkManager.players:
-		var player_name := NetworkManager.players[player_id].name
-		var experience := NetworkManager.player_experience.get(player_id, 0)
-		var is_local := player_id == NetworkManager.my_player_id
+		var state: Dictionary = NetworkManager.players[player_id]
+		var player_name: String = state.name
+		var experience: int = NetworkManager.player_experience.get(player_id, 0)
+		var is_local: bool = player_id == NetworkManager.my_player_id
 		
 		var label := Label.new()
 		label.text = "%s: %d XP" % [player_name, experience]
