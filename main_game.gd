@@ -150,6 +150,7 @@ func _on_pulse(_player_id: int, origin: Vector2, tint: Color) -> void:
 
 func _on_pulse_processed(player_id: int) -> void:
 	# Only grant experience to the local player who initiated the pulse
+	print("DEBUG: _on_pulse_processed called with player_id = ", player_id, ", my_player_id = ", NetworkManager.my_player_id)
 	if player_id == NetworkManager.my_player_id:
 		print("DEBUG: Pulse processed for player ", player_id, ", incrementing experience")
 		_my_experience += 1
