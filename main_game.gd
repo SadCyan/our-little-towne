@@ -92,7 +92,30 @@ func _refresh_world() -> void:
 
 
 func _update_experience_display() -> void:
-	# This function will be implemented in the scene file to avoid rewriting main_game.gd
+	# This function handles updating the HUD experience display
+	if $HUD/Margin/Rows/ExperienceContainer == null:
+		return
+		
+	var player_experience_container := $HUD/Margin/Rows/ExperienceContainer/PlayerExperienceList
+	
+	# Clear existing experience labels
+	for child in player_experience_container.get_children():
+		child.queue_free()
+	
+	# Create new experience labels for each player
+	for player_id in NetworkManager.players:
+		var player_name := NetworkManager.players[player_id].name
+		var experience := NetworkManager.player_experience.get(player_id, 0)
+		var is_local := player_id == NetworkManager.my_player_id
+		
+		var label := Label.new()
+		label.text = "%s: %d XP" % [player_name, experience]
+		if is_local:
+			label.theme_override_colors.font_color = Color("ffffff")
+		else:
+			label.theme_override_colors.font_color = Color("cccccc")
+		label.horizontal_alignment = 0
+		player_experience_container.add_child(label)
 
 
 func _on_pulse(_player_id: int, origin: Vector2, tint: Color) -> void:
